@@ -1,20 +1,73 @@
 #lang racket
-(require ragg/support)
+(require megaparsack megaparsack/text)
+(require data/applicative)              ; pure
+(require parser-tools/lex)              ; position-token
+(require megaparsack/parser-tools/lex)  ; token/p
+(require data/monad)                    ; do
+(require (for-syntax syntax/parse))     ; syntax-parse
+(require racket/stxparam)
+
+(provide make-tokenizer)
+
+(define-syntax-parameter lexer/c
+  (lambda (stx)
+    (raise-syntax-error (syntax-e stx) "undefined or outside of `lexer`.")))
+
+(begin-for-syntax
+  (define (transform port clause)
+    (with-syntax ([(pred parser token) clause])
+                 ; Make a clause of a cond
+                 #`[pred
+                    (define-values (start-line start-col start-pos) (port-next-location #,port))
+                    (void parser)
+                    (define-values (end-line end-col end-pos) (port-next-location #,port))
+                    (position-token token (position start-pos start-line start-col) (position end-pos end-line end-col)) 
+                    ])))
+
+; (lexer port (predicate parser) ...)
+; `parser`s should simply read port until end of lexeme.
+; If the `parser` is called, this macro will return (position-token a)
+(define-syntax (lexer stx)
+  (syntax-parse stx
+    ; Entry point for the syntax which should be used
+    [(_ port (pred parser token) ...)
+     (define transformer (lambda (clause) (transform #'port clause))) ; just sending `port` to the transform function
+     (define input-clauses (syntax-e #'((pred parser token) ...))) ; making a list from the ...
+     (define clauses (map transformer input-clauses))
+      #`(begin
+          (port-count-lines! port)
+          (define (next-token)
+            (define c (peek-char port))
+            (syntax-parameterize ([lexer/c (make-rename-transformer #'c)])
+              (cond
+                [(eof-object? c) #f]
+                [(char-whitespace? c) (read-char port) (next-token)]
+                #,@clauses
+               )))
+          next-token)
+      ]))
 
 (define (make-tokenizer port)
-  (port-count-lines! port)
-  (define (next-token)
-    (define c (peek-char port))
-    (define loc (call-with-values (lambda () (port-next-location port)) list))
-    (match-define (list line col _) loc)
-    (cond
-          [(eof-object? c) #f]
-          [(char=? c #\() (token 'SEXPR (balance-brackets port #\( #\)) #:line line #:column col)] ; S-expression
-          [(char-word? c) (token 'WORD (parse-word port) #:line line #:column col)] ; word
-          [(char-whitespace? c) (read-char port) (next-token)]
-          [else (token c (read-string 1 port) #:line line #:column col)]))
-  next-token)
-(provide make-tokenizer)
+  (lexer port
+    [(char=? lexer/c #\() (token/s-expression port) 'SEXPR]
+    [(char-word? lexer/c) (token/word port) 'WORD]
+    [else (read-string 1 port) 'CHAR]
+    ))
+
+
+(define (token/s-expression port)
+  (let ([left #\(] [right #\)])
+    (define (balance level)
+      (displayln level)
+      (define c (read-char port))
+      (if (eof-object? c)
+          0
+          (cond
+                [(char=? c left) (displayln "left") (balance (+ level 1))]
+                [(char=? c right) (displayln "right") (if (= level 1) 0 (balance (- level 1)))]
+                [else (balance level)])))
+    ; Find the start location and end location of the substring we are searching for
+    (balance 0)))
 
 (define (char-word? c)
   (or (char-alphabetic? c)
@@ -22,29 +75,14 @@
       (char=? c #\-)
       (char=? c #\-)))
 
-; Returns the parsed word
-(define (parse-word port)
-  (define (parse result)
-    (define c (peek-char port))
-    (if (char-word? c)
-      (parse (string-append result (read-string 1 port)))
-      result))
-  (parse ""))
+(define (token/word port)
+  (define c (peek-char port))
+  (cond 
+    [(eof-object? c) 0]
+    [(char-word? c) (read-char port) (token/word port)]
+    [else 0]))
 
 
-(define (balance-brackets port left right)
-  ; TODO: get indices instead of string-append.
-  (define (balance level result)
-    (define c (read-char port))
-    (if (eof-object? c)
-        result
-        (cond
-              [(char=? c left) (balance (+ 1 level) (string-append result (string c)))]
-              [(char=? c right) (if (= level 1)
-                      (string-append result (string c))
-                      (balance (- 1 level) (string-append result (string c))))]
-              [else (balance level (string-append result (string c)))])))
-  (balance 0 ""))
 
 ;;;;; Testing
 (define (reduce gen)
@@ -53,5 +91,3 @@
     (list)
     (cons token (reduce gen))))
 (provide reduce)
-;(define a (make-tokenizer (open-input-file "../bar2.rkt")))
-;(reduce a)
