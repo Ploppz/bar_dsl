@@ -1,6 +1,6 @@
 #lang racket
-(require "parser.rkt")
-(require "reader.rkt")
+(require "src/parser.rkt")
+(require "src/reader.rkt")
 (require megaparsack megaparsack/text)
 (require megaparsack/parser-tools/lex) ; parse-tokens
 
@@ -14,15 +14,15 @@
     (list)
     (cons token (reduce gen))))
 
-(define tokens
-  (reduce
-    (make-tokenizer
-      (open-input-string
-        ; "(define a 'something) run ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)] {ram} {fg:#966} {cpu} Some text (leftsep #363)"))))
-        "(define a 'something) run ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)]."
-        ; "="
-
-        ))))
+(define next-token (make-tokenizer
+  (open-input-string
+    ; "(define a 'something) run ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)] {ram} {fg:#966} {cpu} Some text (leftsep #363)"))))
+    "(define a 'something) run ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)]."
+    ; "="
+    )))
+(displayln next-token)
+(next-token)
+(define tokens (reduce next-token))
 (pretty-print tokens)
 
 ;(define p/p (do (token/p 'WORD)))
