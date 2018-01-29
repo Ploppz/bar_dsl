@@ -24,8 +24,9 @@
 (define (token-syntax/p name [value #f])
   (define (name-equal? tok)
     (match tok
-           [(syntax-box (token tok-name tok-value) _)
+           [(token tok-name tok-value)
             (and (equal? tok-name name) (nand value (not (equal? tok-value value))))]
+           ; (equal-name && !(value && equal-value)) = (equal-name && (!value || equal-value))
            [else #f]))
   (label/p
     (symbol->string name)

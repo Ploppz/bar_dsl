@@ -5,7 +5,7 @@
          data/monad ; for do
          data/applicative) ; for pure
 
-(define sexpr/p ; TODO: doesn't work if I define it after it is used??
+(define sexpr/p
   (do [val <- (token-syntax/p 'SEXPR)] (pure (sexpr/code val))))
 
 (define bar/p (do
@@ -33,10 +33,10 @@
 (define (start/code start-name params transform)
   `(thread (#,start-name (lambda (#,@params) #,transform))))
 
-(define (sexpr/code sbox)
-  (match sbox
-    [(syntax-box (token _ val) (srcloc srcname _ _ _ _))
-     (read-syntax srcname (open-input-string val))]))
+(define (sexpr/code tok)
+  (match tok
+    [(token name val)
+     (read (open-input-string val))]))
 
 
 ; Old parser in ragg:
