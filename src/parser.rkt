@@ -1,22 +1,42 @@
 #lang racket
-(require megaparsack megaparsack/text)
-(require parser-tools/lex) ; for position-token
-(require megaparsack/parser-tools/lex) ; for token/p
-(require data/monad) ; for do
-(require data/applicative) ; for pure
-
 (provide bar/p)
-(define bar/p (do (many/p (token/p 'SEXPR)) (many/p start/p) layout/p))
+(require "lex.rkt"
+         megaparsack
+         data/monad ; for do
+         data/applicative) ; for pure
+
+(define sexpr/p ; TODO: doesn't work if I define it after it is used??
+  (do [val <- (token-syntax/p 'SEXPR)] (pure (sexpr/code val))))
+
+(define bar/p (do
+                [inits <- (many/p (sexpr/p))]
+                [starts <- (many/p start/p)]
+                layout/p
+                (pure (bar/code inits starts))
+                ))
 (define start/p (do
-                  (token/p 'WORD)
-                  (token/p 'WORD)
-                  (token/p '\[ )
-                  (many/p (token/p 'WORD))
-                  (token/p '\= )
-                  (token/p '\> )
-                  (token/p 'SEXPR)
-                  (token/p '\] )))
+                  (token/p 'WORD "start")
+                  [start-name <- (token/p 'WORD)]
+                  (token/p 'CHAR "[")
+                  [params <- (many/p (token/p 'WORD))]
+                  (token/p 'CHAR "=")
+                  (token/p 'CHAR ">")
+                  [transform <- (sexpr/p)]
+                  (token/p 'CHAR "]")
+                  (pure (start/code start-name params transform))))
+
 (define layout/p (token/p '\. ))
+
+
+;;; Translation from syntax-box'es to code.
+(define (bar/code inits starts) 0) ; TODO
+(define (start/code start-name params transform)
+  `(thread (#,start-name (lambda (#,@params) #,transform))))
+
+(define (sexpr/code sbox)
+  (match sbox
+    [(syntax-box (token _ val) (srcloc srcname _ _ _ _))
+     (read-syntax srcname (open-input-string val))]))
 
 
 ; Old parser in ragg:

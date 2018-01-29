@@ -1,12 +1,10 @@
 #lang racket
-(require "src/parser.rkt")
-(require "src/reader.rkt")
-(require megaparsack megaparsack/text)
-(require megaparsack/parser-tools/lex) ; parse-tokens
-
-(require data/monad) ; for do
-(require data/applicative) ; for pure
-(require racket/pretty)
+(require "src/parser.rkt"
+         "src/reader.rkt"
+         megaparsack
+         data/monad ; do
+         data/applicative ; pure
+         racket/pretty)
 
 (define (reduce gen)
   (define token (gen))
@@ -22,11 +20,12 @@
     )))
 (displayln next-token)
 (next-token)
+
 (define tokens (reduce next-token))
 (pretty-print tokens)
 
 ;(define p/p (do (token/p 'WORD)))
 ;(display (parse-result! (parse-tokens p/p tokens)))
 
-(define result (parse-result! (parse-tokens bar/p tokens)))
+(define result (parse-result! (parse bar/p tokens)))
 (display result)

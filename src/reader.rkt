@@ -2,11 +2,8 @@
 ; This file creates a tokenizer using `lexer`.
 (provide make-tokenizer)
 
-;(require megaparsack megaparsack/text)
-;(require megaparsack/parser-tools/lex)  ; token/p
-;(require parser-tools/lex)              ; position-token
-(require data/applicative)              ; pure
-(require data/monad)                    ; do
+(require data/applicative               ; pure
+         data/monad)                    ; do
 
 (require "lex.rkt")
 
@@ -15,8 +12,11 @@
     ; Implicit eof and whitespace test
     [(char=? lexer/c #\() (token/s-expression port) 'SEXPR]
     [(char-word? lexer/c) (token/word port) 'WORD]
-    [else (read-string 1 port) (string->symbol (string lexer/c))]
-    ))
+    [else                 (token/char port) (string->symbol (string lexer/c))]))
+
+(define (token/char port)
+  (read-string 1 port)
+  1)
 
 (define (token/s-expression port)
   (let ([left #\(] [right #\)])

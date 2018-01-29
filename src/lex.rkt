@@ -1,7 +1,9 @@
 #lang racket
 (provide lexer          ; Macro to create a lexer
-         lexer/c)        ; Current character syntax parameter of lexer.
-; Use megaparsack's `parse` to parse the resulting tokens.
+         lexer/c        ; Current character syntax parameter of lexer.
+         token         ; Struct
+         token/p
+         token-syntax/p)
 
 (require (for-syntax syntax/parse)     ; syntax-parse
           (for-syntax megaparsack)
@@ -11,37 +13,48 @@
           data/applicative              ; pure
           data/monad)                   ; do
 
-;;; TOKENS
-(define (token? v)
-  (match v [(syntax-box tok _)   (symbol? tok)]
-           [else        #f]))
-(define (token-value tok)
-  (match tok
-         [(syntax-box tok _)   (if (symbol? tok) tok #f)]
-         [else      #f])) ; TODO: Appropriate way to cast error here?
+(define (extract-string port start-pos span)
+  (define port2 (peeking-input-port port #:init-position start-pos))
+  (read-string span port2))
 
+(struct token (name value) #:transparent)
 ;;; PARSER
-(define (token/p name)
-(label/p
-   (symbol->string name)
-   (do [tok <- (satisfy/p token?)]
-     (pure (token-value tok)))))
+; token-syntax/p: parse a token with name `name`. Returns the whole syntax-box
+(define (token-syntax/p name [value #f])
+  (define (name-equal? tok)
+    (match tok
+           [(syntax-box (token tok-name tok-value) _)
+            (and (equal? tok-name name) (nand value (not (equal? tok-value value))))]
+           [else #f]))
+  (label/p
+    (symbol->string name)
+    (do [tok <- (satisfy/p name-equal?)]
+      (pure tok))))
+
+; token/p: as token/p, but only returns the value part.
+(define (token/p name [value #f])
+  (do [sbox <- (token-syntax/p name value)]
+    (pure (match sbox [(syntax-box value _) value]))))
+
+
 
 ;;; Macro `lexer`
 (define-syntax-parameter lexer/c
   (lambda (stx)
     (raise-syntax-error (syntax-e stx) "undefined or outside of `lexer`.")))
+
 (begin-for-syntax
   (define (transform port clause)
-    (with-syntax ([(pred parser token) clause])
+    (with-syntax ([(pred parser name) clause])
                  ; Make a clause of a cond
                  #`[pred
                     (define-values (start-line start-col start-pos) (port-next-location #,port))
-                    (define span (parser))
-                    (create-token token "undefined" start-line start-col start-pos span)
+                    (define span parser)
+                    (define value (extract-string #,port start-pos span))
+                    (create-token name value "undefined" start-line start-col start-pos span)
                     ])))
-(define (create-token token srcname line column position span)
-  (syntax-box token (srcloc srcname line column position)))
+(define (create-token name value srcname line column position span)
+  (syntax-box (token name value) (srcloc srcname line column position span)))
 
 ; (lexer port (predicate parser) ...)
 ; `parser`s should simply read port until end of lexeme, and return the number of characters read.
