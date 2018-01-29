@@ -10,9 +10,9 @@
 (define (make-tokenizer port)
   (lexer port
     ; Implicit eof and whitespace test
-    [(char=? lexer/c #\() (token/s-expression port) 'SEXPR]
-    [(char-word? lexer/c) (token/word port) 'WORD]
-    [else                 (token/char port) (string->symbol (string lexer/c))]))
+    [(char=? lexer/c #\() (token/s-expression lexer/port) 'SEXPR]
+    [(char-word? lexer/c) (token/word lexer/port) 'WORD]
+    [else                 (token/char lexer/port) (string->symbol (string lexer/c))]))
 
 (define (token/char port)
   (read-string 1 port)
@@ -27,8 +27,8 @@
           (cond
                 [(char=? c left) (+ 1 (balance (+ level 1)))]
                 [(char=? c right) (if (= level 1) 0 (+ 1 (balance (- level 1))))]
-                [else (balance level)])))
-    (balance 0)))
+                [else (+ 1 (balance level))])))
+    (+ 1 (balance 0))))
 
 (define (char-word? c)
   (or (char-alphabetic? c)

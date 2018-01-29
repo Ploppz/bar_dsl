@@ -1,6 +1,7 @@
 #lang racket
 (provide lexer          ; Macro to create a lexer
          lexer/c        ; Current character syntax parameter of lexer.
+         lexer/port     ; The port which parsers should read from.
          token         ; Struct
          token/p
          token-syntax/p)
@@ -42,16 +43,22 @@
 (define-syntax-parameter lexer/c
   (lambda (stx)
     (raise-syntax-error (syntax-e stx) "undefined or outside of `lexer`.")))
+(define-syntax-parameter lexer/port
+  (lambda (stx)
+    (raise-syntax-error (syntax-e stx) "undefined or outside of `lexer`.")))
 
 (begin-for-syntax
   (define (transform port clause)
     (with-syntax ([(pred parser name) clause])
                  ; Make a clause of a cond
                  #`[pred
+                    ; This is ugly. Make a peeking port `port2` which we give to the parser. Then read the string from `port`.
                     (define-values (start-line start-col start-pos) (port-next-location #,port))
-                    (define span parser)
-                    (define value (extract-string #,port start-pos span))
-                    (create-token name value "undefined" start-line start-col start-pos span)
+                    (define port2 (peeking-input-port #,port))
+                    (syntax-parameterize ([lexer/port (make-rename-transformer #'port2)])
+                      (define span parser)  ; TODO: not really necessary that the parsers return span. We can get from port-next-location.
+                      (define value (read-string span #,port))
+                      (create-token name value "undefined" start-line start-col start-pos span))
                     ])))
 (define (create-token name value srcname line column position span)
   (syntax-box (token name value) (srcloc srcname line column position span)))

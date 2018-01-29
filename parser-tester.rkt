@@ -18,8 +18,6 @@
     "(define a 'something) run ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)]."
     ; "="
     )))
-(displayln next-token)
-(next-token)
 
 (define tokens (reduce next-token))
 (pretty-print tokens)
