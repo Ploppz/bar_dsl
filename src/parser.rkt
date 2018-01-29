@@ -6,14 +6,13 @@
          data/applicative) ; for pure
 
 (define sexpr/p
-  (do [val <- (token-syntax/p 'SEXPR)] (pure (sexpr/code val))))
+  (do [val <- (token/p 'SEXPR)] (pure (sexpr/code val))))
 
 (define bar/p (do
-                [inits <- (many/p (sexpr/p))]
+                [inits <- (many/p sexpr/p)]
                 [starts <- (many/p start/p)]
                 layout/p
-                (pure (bar/code inits starts))
-                ))
+                (pure (bar/code inits starts))))
 (define start/p (do
                   (token/p 'WORD "start")
                   [start-name <- (token/p 'WORD)]
@@ -21,11 +20,11 @@
                   [params <- (many/p (token/p 'WORD))]
                   (token/p 'CHAR "=")
                   (token/p 'CHAR ">")
-                  [transform <- (sexpr/p)]
+                  [transform <- sexpr/p]
                   (token/p 'CHAR "]")
                   (pure (start/code start-name params transform))))
 
-(define layout/p (token/p '\. ))
+(define layout/p (token/p 'CHAR "." ))
 
 
 ;;; Translation from syntax-box'es to code.

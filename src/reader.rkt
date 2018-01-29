@@ -12,7 +12,7 @@
     ; Implicit eof and whitespace test
     [(char=? lexer/c #\() (token/s-expression lexer/port) 'SEXPR]
     [(char-word? lexer/c) (token/word lexer/port) 'WORD]
-    [else                 (token/char lexer/port) (string->symbol (string lexer/c))]))
+    [else                 (token/char lexer/port) 'CHAR]))
 
 (define (token/char port)
   (read-string 1 port)
