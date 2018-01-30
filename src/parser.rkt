@@ -5,43 +5,46 @@
          data/monad ; for do
          data/applicative) ; for pure
 
-; Parser summary:
-
-; program : sexpr* start* layout
-; sexpr   : SEXPR
-
-; start   : "start" WORD "[" WORD* "=" ">" sexpr "]"
-
-; TODO
-; OMG.. in the following, we have to deal with spaces indeed..
-; layout  : (orientation elem*)+
-; orientation : ("@left" | "@right" | "@center")
-; elem    : info | text | sexpr
-; widget  : "#" WORD
-; text    : (WORD | CHAR)*
-
 ;;;;;;;;;;;
-;;; PARSERS
+;;; PARSING
+
+;; program : SEXPR* start* layout+
 (define sexpr/p
-  (do [val <- (token/p 'SEXPR)] (pure (sexpr/code val))))
+  (do [val <- (token-type/p 'SEXPR)] (pure (sexpr/code val))))
 
 (define bar/p (do
-                [inits <- (many/p sexpr/p)]
-                [starts <- (many/p start/p)]
-                layout/p
+                [inits <- (many/p (do sexpr/p spaces/p))]
+                [starts <- (many/p start/p (token/p "\n"))]
+                [layouts <- (many/p layout/p #:min 1 #:max 3)]
                 (pure (bar/code inits starts))))
+;; start   : "start" WORD "[" WORD* "=" ">" sexpr "]"
 (define start/p (do
-                  (token/p 'WORD "start")
-                  [start-name <- (token/p 'WORD)]
-                  (token/p 'CHAR "[")
-                  [params <- (many/p (token/p 'WORD))]
-                  (token/p 'CHAR "=")
-                  (token/p 'CHAR ">")
+                  (token/p "start")
+                  [start-name <- (token-type/p 'WORD)]
+                  (token/p "[")
+                  [params <- (many/p (token-type/p 'WORD))]
+                  (token/p "=")
+                  (token/p ">")
                   [transform <- sexpr/p]
-                  (token/p 'CHAR "]")
+                  (token/p "]")
+                  (token/p "\n")
                   (pure (start/code start-name params transform))))
 
-(define layout/p (token/p 'CHAR "." ))
+;; layout  : (orientation elem*)+
+(define layout/p (many/p (do orientation/p (many/p element/p)) #:min 1))
+; orientation : ("@left" | "@right" | "@center")
+(define orientation/p (or/p (do (token/p "@") (token/p "left") (pure 'left))
+                            (do (token/p "@") (token/p "right") (pure 'right))
+                            (do (token/p "@") (token/p "center") (pure 'center))))
+;; elem    : info | text | sexpr
+(define element/p (or widget/p text/p sexpr/p))
+;; widget  : "#" WORD
+(define widget/p (do (token/p "#") (token-type/p 'WORD)))
+;; text    : (WORD | CHAR)*
+(define text/p (or (token-type/p 'WORD) (token-type/p 'CHAR)))
+
+(define spaces/p (many/p (hidden/p space/p)))
+(define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; CODE TRANSLATION

@@ -9,7 +9,7 @@
 
 (define (make-tokenizer port)
   (lexer port
-    ; Implicit eof and whitespace test
+    ; Implicit eof test
     [(char=? lexer/c #\() (token/s-expression lexer/port) 'SEXPR]
     [(char-word? lexer/c) (token/word lexer/port) 'WORD]
     [else                 (token/char lexer/port) 'CHAR]))

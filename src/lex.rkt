@@ -3,6 +3,7 @@
          lexer/c        ; Current character syntax parameter of lexer.
          lexer/port     ; The port which parsers should read from.
          (struct-out token)
+         token-type/p
          token/p)
 
 (require (for-syntax syntax/parse)     ; syntax-parse
@@ -19,25 +20,28 @@
 
 (struct token (name value) #:transparent)
 ;;; PARSER
-; token-syntax/p: parse a token with name `name`. Returns the whole syntax-box
-(define (token/p name [value #f])
+; token-type/p: parse a token with name `name`.
+(define (token-type/p name [value #f])
   (define (name-equal? tok)
     (match tok
            [(token tok-name tok-value)
             (and (equal? tok-name name) (nand value (not (equal? tok-value value))))]
-           ; (equal-name && !(value && equal-value)) = (equal-name && (!value || equal-value))
            [else #f]))
   (label/p
     (symbol->string name)
     (do [tok <- (satisfy/p name-equal?)]
       (pure tok))))
 
-; token/p: as token/p, but only returns the value part.
-; (define (token/p name [value #f])
-  ; (do [tok <- (token-syntax/p name value)]
-    ; (pure (match tok [(token value _) value]))))
-
-
+; token-type/p: parse a token value `value`.
+(define (token/p value)
+  (define (val-equal? tok)
+    (match tok
+           [(token _ tok-value) (equal? tok-value value)]
+           [else #f]))
+  (label/p
+    value
+    (do [tok <- (satisfy/p val-equal?)]
+      (pure tok))))
 
 ;;; Macro `lexer`
 (define-syntax-parameter lexer/c
@@ -79,6 +83,5 @@
             (syntax-parameterize ([lexer/c (make-rename-transformer #'c)])
               (cond
                 [(eof-object? c) #f]
-                [(char-whitespace? c) (read-char port) (next-token)]
                 #,@clauses)))
           next-token) ]))
