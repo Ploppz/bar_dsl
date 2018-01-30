@@ -2,7 +2,7 @@
 (provide lexer          ; Macro to create a lexer
          lexer/c        ; Current character syntax parameter of lexer.
          lexer/port     ; The port which parsers should read from.
-         token         ; Struct
+         (struct-out token)
          token/p)
 
 (require (for-syntax syntax/parse)     ; syntax-parse

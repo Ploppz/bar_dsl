@@ -15,7 +15,7 @@
 (define next-token (make-tokenizer
   (open-input-string
     ; "(define a 'something) run ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)] {ram} {fg:#966} {cpu} Some text (leftsep #363)"))))
-    "(define a 'something) start ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)]."
+    "(define a 'something) start ram [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)]."
     ; "="
     )))
 
@@ -25,6 +25,5 @@
 ;(define p/p (do (token/p 'WORD)))
 ;(display (parse-result! (parse-tokens p/p tokens)))
 
-(pretty-print (parse bar/p tokens))
 (define result (parse-result! (parse bar/p tokens)))
-(display result)
+(pretty-print result)
