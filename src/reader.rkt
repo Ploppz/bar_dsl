@@ -11,12 +11,13 @@
   (lexer port
     ; Implicit eof test
     [(char=? lexer/c #\() (token/s-expression lexer/port) 'SEXPR]
+    [(char=? lexer/c #\\) (token/chars lexer/port 2) 'ESCAPED-CHAR]
     [(char-word? lexer/c) (token/word lexer/port) 'WORD]
-    [else                 (token/char lexer/port) 'CHAR]))
+    [else                 (token/chars lexer/port 1) 'CHAR]))
 
-(define (token/char port)
-  (read-string 1 port)
-  1)
+(define (token/chars port n)
+  (read-string n port)
+  n)
 
 (define (token/s-expression port)
   (let ([left #\(] [right #\)])

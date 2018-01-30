@@ -8,6 +8,14 @@
 ;;;;;;;;;;;
 ;;; PARSING
 
+;;; Helpers
+(define (text-char? tok)
+  (match tok
+         [(token 'CHAR val) (nor (string=? val "(") (string=? val ")") (string=? val "{") (string=? val "}"))]))
+(struct widget (name))
+
+;;;
+
 ;; program : SEXPR* start* layout+
 (define sexpr/p
   (do [val <- (token-type/p 'SEXPR)] (pure (sexpr/code val))))
@@ -15,7 +23,7 @@
 (define bar/p (do
                 [inits <- (many/p (do sexpr/p spaces/p))]
                 [starts <- (many/p start/p)]
-                [layouts <- (many/p layout/p #:min 1 #:max 3)]
+                [layout <- layout/p]
                 (pure (bar/code inits starts))))
 ;; start   : "start" WORD "[" WORD* "=" ">" sexpr "]"
 (define start/p (do
@@ -29,22 +37,33 @@
                   (pure (start/code start-name params transform))))
 
 ;; text    : WORD
-(define text/p (or (token-type/p 'WORD) (token-type/p 'CHAR)))
+; Returns a string
+(define text/p (do [text-tokens <- (many/p (or/p
+                                             (token-type/p 'WORD)
+                                             (token-type/p 'ESCAPED-CHAR)
+                                             (satisfy/p text-char?)))]
+                   ; Apend the values of the tokens to get the original text
+                   (pure (apply string-append (map token-value text-tokens)))))
 ;; widget  : "#" WORD
-(define widget/p (do (token/p "#") (token-type/p 'WORD)))
+(define widget/p (do (token/p "{")
+                     [name <- (token-type/p 'WORD)]
+                     (token/p "}")
+                     (pure (widget name))))
 ;; elem    : info | text | sexpr
-(define element/p (or widget/p text/p sexpr/p))
-;; widget  : "#" WORD
+(define element/p (or/p widget/p text/p sexpr/p))
 ;; orientation : ("@left" | "@right" | "@center")
 (define orientation/p (or/p (do (token/p "@") (token/p "left") (pure 'left))
                             (do (token/p "@") (token/p "right") (pure 'right))
                             (do (token/p "@") (token/p "center") (pure 'center))))
 ;; layout  : (orientation elem*)+
-(define layout/p (many/p (do orientation/p (many/p element/p)) #:min 1))
-
+; Returns a nested list which can safely be flattened
+(define layout/p (many/p (do [ori <- orientation/p]
+                             [elems <- (many/p element/p)]
+                             (pure (list ori elems))) #:min 1 #:max 3))
 
 (define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
 (define spaces/p (many/p (hidden/p space/p)))
+
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; CODE TRANSLATION
