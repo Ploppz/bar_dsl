@@ -12,12 +12,7 @@
     (list)
     (cons token (reduce gen))))
 
-(define next-token (make-tokenizer
-  (open-input-string
-    ; "(define a 'something) run ram-loop [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)] {ram} {fg:#966} {cpu} Some text (leftsep #363)"))))
-    "(define a 'something) start ram [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)]."
-    ; "="
-    )))
+(define next-token (make-tokenizer (open-input-file "test-bar")))
 
 (define tokens (reduce next-token))
 (pretty-print tokens)

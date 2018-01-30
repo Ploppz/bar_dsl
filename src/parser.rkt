@@ -14,37 +14,37 @@
 
 (define bar/p (do
                 [inits <- (many/p (do sexpr/p spaces/p))]
-                [starts <- (many/p start/p (token/p "\n"))]
+                [starts <- (many/p start/p)]
                 [layouts <- (many/p layout/p #:min 1 #:max 3)]
                 (pure (bar/code inits starts))))
 ;; start   : "start" WORD "[" WORD* "=" ">" sexpr "]"
 (define start/p (do
-                  (token/p "start")
-                  [start-name <- (token-type/p 'WORD)]
-                  (token/p "[")
-                  [params <- (many/p (token-type/p 'WORD))]
-                  (token/p "=")
-                  (token/p ">")
-                  [transform <- sexpr/p]
-                  (token/p "]")
-                  (token/p "\n")
+                  (token/p "start") spaces/p
+                  [start-name <- (token-type/p 'WORD)] spaces/p
+                  (token/p "[") spaces/p
+                  [params <- (many/p (do [param <- (token-type/p 'WORD)] spaces/p (pure param)))] 
+                  (token/p "=") (token/p ">") spaces/p
+                  [transform <- sexpr/p] spaces/p
+                  (token/p "]") spaces/p
                   (pure (start/code start-name params transform))))
 
-;; layout  : (orientation elem*)+
-(define layout/p (many/p (do orientation/p (many/p element/p)) #:min 1))
-; orientation : ("@left" | "@right" | "@center")
-(define orientation/p (or/p (do (token/p "@") (token/p "left") (pure 'left))
-                            (do (token/p "@") (token/p "right") (pure 'right))
-                            (do (token/p "@") (token/p "center") (pure 'center))))
+;; text    : WORD
+(define text/p (or (token-type/p 'WORD) (token-type/p 'CHAR)))
+;; widget  : "#" WORD
+(define widget/p (do (token/p "#") (token-type/p 'WORD)))
 ;; elem    : info | text | sexpr
 (define element/p (or widget/p text/p sexpr/p))
 ;; widget  : "#" WORD
-(define widget/p (do (token/p "#") (token-type/p 'WORD)))
-;; text    : (WORD | CHAR)*
-(define text/p (or (token-type/p 'WORD) (token-type/p 'CHAR)))
+;; orientation : ("@left" | "@right" | "@center")
+(define orientation/p (or/p (do (token/p "@") (token/p "left") (pure 'left))
+                            (do (token/p "@") (token/p "right") (pure 'right))
+                            (do (token/p "@") (token/p "center") (pure 'center))))
+;; layout  : (orientation elem*)+
+(define layout/p (many/p (do orientation/p (many/p element/p)) #:min 1))
 
-(define spaces/p (many/p (hidden/p space/p)))
+
 (define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
+(define spaces/p (many/p (hidden/p space/p)))
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; CODE TRANSLATION
