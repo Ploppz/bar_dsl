@@ -5,22 +5,25 @@
          data/monad ; for do
          data/applicative) ; for pure
 
-;;;;;;;;;;;
-;;; PARSING
-
 ;;; Helpers
 (define (text-char? tok)
   (match tok
-         [(token 'CHAR val) (nor (string=? val "(") (string=? val ")") (string=? val "{") (string=? val "}") (string=? val "\n"))]))
-(struct widget (name))
-;;;
+         [(token 'CHAR val) (nor (string=? val "(") (string=? val ")") (string=? val "{") (string=? val "}") (string=? val "\n"))]
+         [_ #f]))
+(struct widget (name)) ; For the layout
+(struct sexpr (datum)) ; For the layout
+
+
+
+;;;;;;;;;;;
+;;; PARSING
 
 (define sexpr/p
   (do [val <- (token-type/p 'SEXPR)] (pure (sexpr/code val))))
 
 ;; program : SEXPR* start* layout+
 (define bar/p (do
-                [inits <- (many/p (do sexpr/p spaces/p))]
+                [inits <- (many/p (do [sexpr <- sexpr/p] spaces/p (pure sexpr)))]
                 [starts <- (many/p start/p)]
                 [layout <- layout/p]
                 eof/p
@@ -43,18 +46,20 @@
                                          (token-type/p 'ESCAPED-CHAR)
                                          (satisfy/p text-char?))]
                    (pure (token-value text-tokens))))
-;; widget  : "#" WORD
+;; widget  : "{" WORD "}"
 (define widget/p (do (token/p "{")
                      [name <- (token-type/p 'WORD)]
                      (token/p "}")
-                     space/p
                      (pure (widget name))))
 ;; elem    : info | text | sexpr
-(define element/p (or/p widget/p text/p sexpr/p))
+(define element/p (or/p widget/p
+                        text/p
+                        (do [datum <- sexpr/p] (pure (sexpr datum)))))
 ;; orientation : ("@left" | "@right" | "@center")
-(define orientation/p (or/p (do (token/p "@") (token/p "left") (pure 'left))
-                            (do (token/p "@") (token/p "right") (pure 'right))
-                            (do (token/p "@") (token/p "center") (pure 'center))))
+(define orientation/p (do (token/p "@") [ori <- (or/p (do (token/p "left") (pure 'left))
+                                              (do (token/p "right") (pure 'right))
+                                              (do (token/p "center") (pure 'center)))]
+                        (pure ori)))
 ;; layout  : (orientation elem*)+
 ; Returns a nested list which can safely be flattened
 (define layout/p (many/p (do [ori <- orientation/p]
@@ -70,17 +75,20 @@
 ;;;;;;;;;;;;;;;;;;;;
 ;;; CODE TRANSLATION
 
-(define (bar/code inits starts layout)
+(define (bar/code inits starts nested-layout)
   (define start-codes (map (lambda (x) (car x)) starts))
-  (define match-codes (map (lambda (x) (cdr x)) starts))
-  ; ^ TODO: somehow one parenthesis too many
+  (define match-codes (map (lambda (x) (cdr x)) starts)) ; <-- TODO: somehow one parenthesis too many
+  ; Make a namespace and execute the initial statements with it
+  (define ns (make-base-namespace))
+  (map (lambda (datum) (eval datum ns)) inits)
+  ; Structure the layout
+  (define layout (layout-structure nested-layout ns))
+  ; Code
   `(
     (require racket/serialize)
-    ,@inits
     (define-values (pipe-in) (pipe-out) (make-pipe))
     ,@start-codes
-
-    ,@layout
+    ,layout
     (define (loop)
       (define obj (deserialize pipe-out))
       (match obj ,@match-codes)
@@ -113,3 +121,35 @@
               (string->symbol val)]))
 
 
+(define (layout-structure nested-layout namespace)
+  (concat-subsequent-strings
+    (layout-transform (flatten nested-layout) namespace)))
+
+(define (layout-transform flat-layout namespace)
+  ; lemonbar format. In the future one can use other kinds of formats
+  (define (transform elem)
+    (define (widget->code name)
+      (define sym (string->symbol (format "~a-state" name)))
+      '(lambda () sym))
+    (match elem
+           ['left "%{l}"]
+           ['right "%{r}"]
+           ['center "%{c}"]
+           [(widget name) (widget->code name)]
+           [(sexpr datum) (define val (eval datum namespace))
+                          (if (string? val) val
+                            (error "Function call in layout must return string!"))] ;TODO Proper error...
+           [else elem]))
+  (map transform flat-layout))
+(define (concat-subsequent-strings l) ; Concatenate all subsequent strings in a list
+  (define (g l str-acc)
+    (cond
+      [(empty? l) l]
+      [else (define head (first l))
+            (define tail (rest l))
+            (cond
+              [(string? head) (g tail (string-append str-acc head))]
+              [else (cond
+                      [(non-empty-string? str-acc) (cons str-acc (cons head (g tail "")))]
+                      [else                        (cons head (g tail ""))])])]))
+  (g l ""))
