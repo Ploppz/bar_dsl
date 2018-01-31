@@ -1,4 +1,0 @@
-(define (foo) "Foo")
-start ram [ram max-ram => (format \"~a/~a GB RAM\" ram max-ram)]
-@left {ram}Help please (foo)
-@right {music}Help

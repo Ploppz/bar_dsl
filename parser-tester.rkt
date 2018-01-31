@@ -12,7 +12,9 @@
     (list)
     (cons token (reduce gen))))
 
-(define next-token (make-tokenizer (open-input-file "test-bar")))
+(define port (open-input-file "test-bar.rkt"))
+(read-line port)
+(define next-token (make-tokenizer port))
 
 (define tokens (reduce next-token))
 (pretty-print tokens)

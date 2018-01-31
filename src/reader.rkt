@@ -1,11 +1,27 @@
 #lang racket
-; This file creates a tokenizer using `lexer`.
-(provide make-tokenizer)
+; This file creates a tokenizer using `lexer`, and provides `read-syntax`.
+(provide read-syntax
+         make-tokenizer)
 
-(require data/applicative               ; pure
-         data/monad)                    ; do
+(require data/applicative              ; pure
+         data/monad                    ; do
+         megaparsack
+         "lex.rkt"
+         "parser.rkt")
 
-(require "lex.rkt")
+(require racket/pretty)
+
+(define (read-syntax path port)
+  (define (reduce gen)
+    (define token (gen))
+    (if (false? token)
+      (list)
+      (cons token (reduce gen))))
+  (define next-token (make-tokenizer port))
+  (define tokens (reduce next-token))
+  (pretty-print tokens)
+  (datum->syntax #f (parse-result! (parse bar/p tokens))))
+
 
 (define (make-tokenizer port)
   (lexer port

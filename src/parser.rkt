@@ -20,9 +20,12 @@
 
 (define sexpr/p
   (do [val <- (token-type/p 'SEXPR)] (pure (sexpr/code val))))
+(define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
+(define spaces/p (many/p (hidden/p space/p)))
 
 ;; program : SEXPR* start* layout+
 (define bar/p (do
+                spaces/p
                 [inits <- (many/p (do [sexpr <- sexpr/p] spaces/p (pure sexpr)))]
                 [starts <- (many/p start/p)]
                 [layout <- layout/p]
@@ -50,7 +53,7 @@
 (define widget/p (do (token/p "{")
                      [name <- (token-type/p 'WORD)]
                      (token/p "}")
-                     (pure (widget name))))
+                     (pure (widget (token-value name)))))
 ;; elem    : info | text | sexpr
 (define element/p (or/p widget/p
                         text/p
@@ -68,36 +71,37 @@
                              spaces/p
                              (pure (list ori elems))) #:min 1 #:max 3))
 
-(define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
-(define spaces/p (many/p (hidden/p space/p)))
 
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; CODE TRANSLATION
 
 (define (bar/code inits starts nested-layout)
-  (define start-codes (map (lambda (x) (car x)) starts))
-  (define match-codes (map (lambda (x) (cdr x)) starts)) ; <-- TODO: somehow one parenthesis too many
+  (define start-init (map car starts))
+  (define start-thread (map cadr starts))
+  (define start-match (map caddr starts))
   ; Make a namespace and execute the initial statements with it
   (define ns (make-base-namespace))
   (map (lambda (datum) (eval datum ns)) inits)
   ; Structure the layout
   (define layout (layout-structure nested-layout ns))
   ; Code
-  `(
+  `(module bar-mod "src/expander.rkt"
     (require racket/serialize)
-    (define-values (pipe-in) (pipe-out) (make-pipe))
-    ,@start-codes
-    ,layout
+    (define-values (pipe-in pipe-out) (make-pipe))
+    ,@start-init
+    ,@start-thread
+    (define layout (list ,@layout))
     (define (loop)
       (define obj (deserialize pipe-out))
-      (match obj ,@match-codes)
-      ; ^ TODO: Not that simple. Need to keep state about each widget..
-      ;     That is... store the `-state` obj and update it.
+      (match obj ,@start-match)
       ; Plan:
       ;   - Define the state variables first.
       ;   - Here in the loop, we need to go through the format! When e.g. {mpd} is reached,
       ;     just apply the (match-) transform to the saved state variable.
+      (for [element layout]
+           (display element))
+      (display "\n")
       (loop))
 
     ))
@@ -105,11 +109,13 @@
 (define (start/code start-name params transform)
   (define name (token-value start-name))
   (define listener-name (string->symbol (format "~a-listener" name)))
-  (define state-name (string->symbol (format "~a-state" name)))
+  (define state-var (string->symbol (format "~a-value" name)))
+  (define state-type (string->symbol (format "~a-state" name)))
   (list 
-    `(thread (,listener-name pipe-in))          ; Start thread
-    `[(,state-name ,@(map token->ident params)) ; Match clause
-      ,transform]))
+    `(define ,state-var "")                     ; Code to init state
+    `(thread (,listener-name pipe-in))          ; Code to start thread
+    `[(,state-type ,@(map token->ident params)) ; Match clause
+      (set! ,state-var ,transform)]))
 
 (define (sexpr/code tok)
   (match tok
@@ -129,8 +135,8 @@
   ; lemonbar format. In the future one can use other kinds of formats
   (define (transform elem)
     (define (widget->code name)
-      (define sym (string->symbol (format "~a-state" name)))
-      '(lambda () sym))
+      (define sym (string->symbol (format "~a-value" name)))
+      `(lambda () ,sym))
     (match elem
            ['left "%{l}"]
            ['right "%{r}"]
