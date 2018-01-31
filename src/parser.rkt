@@ -11,20 +11,20 @@
 ;;; Helpers
 (define (text-char? tok)
   (match tok
-         [(token 'CHAR val) (nor (string=? val "(") (string=? val ")") (string=? val "{") (string=? val "}"))]))
+         [(token 'CHAR val) (nor (string=? val "(") (string=? val ")") (string=? val "{") (string=? val "}") (string=? val "\n"))]))
 (struct widget (name))
-
 ;;;
 
-;; program : SEXPR* start* layout+
 (define sexpr/p
   (do [val <- (token-type/p 'SEXPR)] (pure (sexpr/code val))))
 
+;; program : SEXPR* start* layout+
 (define bar/p (do
                 [inits <- (many/p (do sexpr/p spaces/p))]
                 [starts <- (many/p start/p)]
                 [layout <- layout/p]
-                (pure (bar/code inits starts))))
+                eof/p
+                (pure (bar/code inits starts layout))))
 ;; start   : "start" WORD "[" WORD* "=" ">" sexpr "]"
 (define start/p (do
                   (token/p "start") spaces/p
@@ -37,17 +37,17 @@
                   (pure (start/code start-name params transform))))
 
 ;; text    : WORD
-; Returns a string
-(define text/p (do [text-tokens <- (many/p (or/p
-                                             (token-type/p 'WORD)
-                                             (token-type/p 'ESCAPED-CHAR)
-                                             (satisfy/p text-char?)))]
-                   ; Apend the values of the tokens to get the original text
-                   (pure (apply string-append (map token-value text-tokens)))))
+; Returns a string (possibly part of a bigger)
+(define text/p (do [text-tokens <- (or/p
+                                         (token-type/p 'WORD)
+                                         (token-type/p 'ESCAPED-CHAR)
+                                         (satisfy/p text-char?))]
+                   (pure (token-value text-tokens))))
 ;; widget  : "#" WORD
 (define widget/p (do (token/p "{")
                      [name <- (token-type/p 'WORD)]
                      (token/p "}")
+                     space/p
                      (pure (widget name))))
 ;; elem    : info | text | sexpr
 (define element/p (or/p widget/p text/p sexpr/p))
@@ -58,7 +58,9 @@
 ;; layout  : (orientation elem*)+
 ; Returns a nested list which can safely be flattened
 (define layout/p (many/p (do [ori <- orientation/p]
+                             spaces/p
                              [elems <- (many/p element/p)]
+                             spaces/p
                              (pure (list ori elems))) #:min 1 #:max 3))
 
 (define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
@@ -68,7 +70,7 @@
 ;;;;;;;;;;;;;;;;;;;;
 ;;; CODE TRANSLATION
 
-(define (bar/code inits starts)
+(define (bar/code inits starts layout)
   (define start-codes (map (lambda (x) (car x)) starts))
   (define match-codes (map (lambda (x) (cdr x)) starts))
   ; ^ TODO: somehow one parenthesis too many
@@ -78,6 +80,7 @@
     (define-values (pipe-in) (pipe-out) (make-pipe))
     ,@start-codes
 
+    ,@layout
     (define (loop)
       (define obj (deserialize pipe-out))
       (match obj ,@match-codes)
