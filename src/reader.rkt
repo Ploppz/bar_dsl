@@ -19,7 +19,6 @@
       (cons token (reduce gen))))
   (define next-token (make-tokenizer port))
   (define tokens (reduce next-token))
-  (pretty-print tokens)
   (datum->syntax #f (parse-result! (parse bar/p tokens))))
 
 

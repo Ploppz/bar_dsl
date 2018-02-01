@@ -1,9 +1,12 @@
 #lang racket
-; https://rosettacode.org/wiki/Get_system_command_output#Racket
+(provide mpd-listener mpd-state)
 
+(require racket/serialize)
+
+; https://rosettacode.org/wiki/Get_system_command_output#Racket
 (define (subcmd cmd) (regexp-split #px"\n" (with-output-to-string (lambda () (system cmd)))))
 
-(struct mpd-state (state) #:transparent)
+(struct mpd-state (state) #:prefab)
 
 (define (mpd-get-state)
   (define lines (subcmd "mpc"))
@@ -21,6 +24,6 @@
 (define (mpd-listener port)
   (define (loop)
     (system "mpc idle player >/dev/null")
-    (displayln (mpd-get-state) port)
+    (write (serialize (mpd-get-state)) port)
     (loop))
   (loop))

@@ -88,23 +88,26 @@
   ; Code
   `(module bar-mod "src/expander.rkt"
     (require racket/serialize)
+    (require racket/pretty) ; TODO
     (define-values (pipe-in pipe-out) (make-pipe))
     ,@start-init
     ,@start-thread
     (define layout (list ,@layout))
     (define (loop)
-      (define obj (deserialize pipe-out))
+      (define raw-obj (read pipe-in))
+      (define obj (deserialize raw-obj))
       (match obj ,@start-match)
       ; Plan:
       ;   - Define the state variables first.
       ;   - Here in the loop, we need to go through the format! When e.g. {mpd} is reached,
       ;     just apply the (match-) transform to the saved state variable.
-      (for [element layout]
-           (display element))
+      (for ([element layout])
+           (cond
+             [(procedure? element) (display (element))]
+             [else (display element)]))
       (display "\n")
       (loop))
-
-    ))
+    (loop)))
 
 (define (start/code start-name params transform)
   (define name (token-value start-name))
@@ -113,7 +116,7 @@
   (define state-type (string->symbol (format "~a-state" name)))
   (list 
     `(define ,state-var "")                     ; Code to init state
-    `(thread (,listener-name pipe-in))          ; Code to start thread
+    `(thread (lambda () (,listener-name pipe-out)))         ; Code to start thread
     `[(,state-type ,@(map token->ident params)) ; Match clause
       (set! ,state-var ,transform)]))
 
