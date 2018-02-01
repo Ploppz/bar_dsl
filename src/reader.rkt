@@ -26,7 +26,7 @@
   (lexer port
     ; Implicit eof test
     [(char=? lexer/c #\() (token/s-expression lexer/port) 'SEXPR]
-    [(char=? lexer/c #\\) (token/chars lexer/port 2) 'ESCAPED-CHAR]
+    ; [(char=? lexer/c #\\) (token/chars lexer/port 2) 'ESCAPED-CHAR]
     [(char-word? lexer/c) (token/word lexer/port) 'WORD]
     [else                 (token/chars lexer/port 1) 'CHAR]))
 

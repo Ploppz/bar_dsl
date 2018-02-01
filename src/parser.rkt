@@ -8,7 +8,7 @@
 ;;; Helpers
 (define (text-char? tok)
   (match tok
-         [(token 'CHAR val) (nor (string=? val "(") (string=? val ")") (string=? val "{") (string=? val "}") (string=? val "\n"))]
+         [(token 'CHAR val) (nor (string=? val "\n") (string=? val "'"))]
          [_ #f]))
 (struct widget (name)) ; For the layout
 (struct sexpr (datum)) ; For the layout
@@ -42,22 +42,25 @@
                   (token/p "]") spaces/p
                   (pure (start/code start-name params transform))))
 
-;; text    : WORD
+;; text    : WORD | (any char but \n) | "\'"
 ; Returns a string (possibly part of a bigger)
-(define text/p (do [text-tokens <- (or/p
-                                         (token-type/p 'WORD)
-                                         (token-type/p 'ESCAPED-CHAR)
-                                         (satisfy/p text-char?))]
-                   (pure (token-value text-tokens))))
-;; widget  : "{" WORD "}"
-(define widget/p (do (token/p "{")
+(define text/p (do [text-token <- (or/p (token-type/p 'WORD)
+                                        (do (token/p "\\") (token/p "'") (pure (token 'CHAR "'")))
+                                        (satisfy/p text-char?))]
+                   (pure (token-value text-token))))
+;; widget  : "[" WORD "]"
+(define widget/p (do (token/p "[")
                      [name <- (token-type/p 'WORD)]
-                     (token/p "}")
+                     (token/p "]")
                      (pure (widget (token-value name)))))
-;; elem    : info | text | sexpr
-(define element/p (or/p widget/p
-                        text/p
-                        (do [datum <- sexpr/p] (pure (sexpr datum)))))
+;; special : "'" (sexpr | widget)
+(define special/p (do (token/p "'")
+                    (or/p
+                      (do [datum <- sexpr/p] (pure (sexpr datum)))
+                      widget/p
+                      (do (pure "'"))))) ; <-- If all else fails, treat "'" as text!
+;; elem    : text | special
+(define element/p (or/p text/p special/p))
 ;; orientation : ("@left" | "@right" | "@center")
 (define orientation/p (do (token/p "@") [ori <- (or/p (do (token/p "left") (pure 'left))
                                               (do (token/p "right") (pure 'right))

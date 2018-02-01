@@ -14,13 +14,10 @@
           data/applicative              ; pure
           data/monad)                   ; do
 
-(define (extract-string port start-pos span)
-  (define port2 (peeking-input-port port #:init-position start-pos))
-  (read-string span port2))
-
 (struct token (name value) #:transparent)
-;;; PARSER
-; token-type/p: parse a token with name `name`.
+;;;;;;;;;;;
+;;; Parsers
+;        token-type/p: parse a token with name `name`, and optionally value `value`.
 (define (token-type/p name [value #f])
   (define (name-equal? tok)
     (match tok
@@ -32,7 +29,7 @@
     (do [tok <- (satisfy/p name-equal?)]
       (pure tok))))
 
-; token-type/p: parse a token value `value`.
+;        token/p: parse a token value `value`.
 (define (token/p value)
   (define (val-equal? tok)
     (match tok
@@ -43,6 +40,7 @@
     (do [tok <- (satisfy/p val-equal?)]
       (pure tok))))
 
+;;;;;;;;;;;;;;;;;
 ;;; Macro `lexer`
 (define-syntax-parameter lexer/c
   (lambda (stx)
@@ -56,11 +54,15 @@
     (with-syntax ([(pred parser name) clause])
                  ; Make a clause of a cond
                  #`[pred
-                    ; This is ugly. Make a peeking port `port2` which we give to the parser. Then read the string from `port`.
+                    ; This is ugly:
+                    ; Make a peeking port `port2` which we give to the parser.
+                    ; Then read the string from `port`.
                     (define-values (start-line start-col start-pos) (port-next-location #,port))
                     (define port2 (peeking-input-port #,port))
                     (syntax-parameterize ([lexer/port (make-rename-transformer #'port2)])
-                      (define span parser)  ; TODO: not really necessary that the parsers return span. We can get from port-next-location.
+                      (define span parser)
+                      ; ^ TODO: not really necessary that the parsers return span.
+                      ;         We can get from port-next-location.
                       (define value (read-string span #,port))
                       (create-token name value "undefined" start-line start-col start-pos span))
                     ])))
