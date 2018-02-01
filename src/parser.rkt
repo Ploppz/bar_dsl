@@ -106,17 +106,19 @@
              [(procedure? element) (display (element))]
              [else (display element)]))
       (display "\n")
+      (flush-output)
       (loop))
     (loop)))
 
 (define (start/code start-name params transform)
   (define name (token-value start-name))
   (define listener-name (string->symbol (format "~a-listener" name)))
+  (define thread-name (string->symbol (format "~a-thread" name)))
   (define state-var (string->symbol (format "~a-value" name)))
   (define state-type (string->symbol (format "~a-state" name)))
   (list 
-    `(define ,state-var "")                     ; Code to init state
-    `(thread (lambda () (,listener-name pipe-out)))         ; Code to start thread
+    `(define ,state-var "") ; Code to init state
+    `(define ,thread-name (thread (lambda () (,listener-name pipe-out)))) ; Code to start thread
     `[(,state-type ,@(map token->ident params)) ; Match clause
       (set! ,state-var ,transform)]))
 
