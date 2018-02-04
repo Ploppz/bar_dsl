@@ -21,16 +21,8 @@
 (define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
 (define spaces/p (many/p (hidden/p space/p)))
 
-;; program : ([']SEXPR)* start* layout+
-(define bar/p (do
-                spaces/p
-                [inits <- (many/p (or/p static-sexpr/p dynamic-sexpr/p))]
-                [starts <- (many/p start/p)]
-                [layout <- layout/p]
-                eof/p
-                (pure (bar/code inits starts layout))))
-(define static-sexpr/p (do (token/p "'") [datum <- sexpr/p] spaces/p (pure (list 'STATIC datum))))
-(define dynamic-sexpr/p (do [datum <- sexpr/p] spaces/p (pure (list 'DYNAMIC datum))))
+(define static-sexpr/p (do (token/p "'") [datum <- sexpr/p] spaces/p (pure (list 'STATIC-SEXPR datum))))
+(define dynamic-sexpr/p (do [datum <- sexpr/p] spaces/p (pure (list 'DYNAMIC-SEXPR datum))))
 
 ;; start   : ("start" | "period" INT) WORD "[" WORD* "=" ">" sexpr "]"
 (define int/p (do [digits <- (many/p (satisfy/p (lambda (tok) (char-numeric? (string-ref (token-value tok) 0)))))]
@@ -78,41 +70,57 @@
                         (pure ori)))
 ;; layout  : (orientation elem*)+
 ; Returns a nested list which can safely be flattened
-(define layout/p (many/p (do [ori <- orientation/p]
-                             spaces/p
-                             [elems <- (many/p element/p)]
-                             spaces/p
-                             (pure (list ori elems))) #:min 1 #:max 3))
+(define layout/p (do [ori <- orientation/p]
+                   spaces/p
+                   [elems <- (many/p element/p)]
+                   spaces/p
+                   (pure (list 'LAYOUT (list ori elems)))))
+;; program : ([']SEXPR)* start* layout+
+(define bar/p (do
+                spaces/p
+                [elements <- (many/p (or/p
+                                       static-sexpr/p
+                                       dynamic-sexpr/p
+                                       start/p
+                                       layout/p))]
+                eof/p
+                (pure (bar/code elements))))
 
 
 
 ;;;;;;;;;;;;;;;;;;;;
 ;;; CODE TRANSLATION
 
-(define (bar/code inits starts nested-layout)
-  ; Split inits into dynamic part, which is added to the code, and static part, which is evaluated
-  (define user-inits (filter-map (lambda (x) (match x [(list 'DYNAMIC code) code] [_ #f])) inits))
-  (define static-inits (filter-map (lambda (x) (match x [(list 'STATIC code) code] [_ #f])) inits))
+(define (bar/code elements)
+  ; Split the elements into
+  (define (split all [a (list)] [b (list)] [c (list)] [d (list)] [e (list)] [f (list)])
+    (if (empty? all)
+      (values (reverse a) (reverse b) (reverse c) (reverse d) (reverse e) (reverse f))
+      (match (first all)
+             [(list 'DYNAMIC-SEXPR code) (split (rest all) (cons code a) b c d e f)]
+             [(list 'STATIC-SEXPR code) (split (rest all) a (cons code b) c d e f)]
+             [(list 'START x y z) (split (rest all) a b (cons x c) (cons y d) (cons z e) f)]
+             [(list 'LAYOUT code) (split (rest all) a b c d e (cons code f))])))
 
-  (define start-inits (map car starts))
+  (define-values (dynamic-inits static-inits start-inits start-threads/periodics start-patterns layouts)
+                 (split elements))
   
-  (define (fm-periodic x) (match (cadr x) [(list 'PERIODIC code) code] [_ #f]))
-  (define start-periodics (filter-map fm-periodic starts))
-  (define start-threads (map cadr (filter (negate fm-periodic) starts)))
+  (define (fm-periodic x) (match x [(list 'PERIODIC code) code] [_ #f]))
+  (define start-periodics (filter-map fm-periodic start-threads/periodics))
+  (define start-threads (filter (negate fm-periodic) start-threads/periodics))
 
-  (define start-patterns (map caddr starts))
   ; Make a namespace and execute the initial statements with it
   (define ns (make-base-namespace))
   (map (lambda (datum) (eval datum ns)) static-inits)
   ; Structure the layout
-  (define layout (layout-structure nested-layout ns))
+  (define layout (layout-structure layouts ns))
   ; Code
   `(module bar-mod "src/expander.rkt"
     (require racket/serialize)
     (define-values (pipe-in pipe-out) (make-pipe))
     ,@start-inits
     ,@start-threads
-    ,@user-inits
+    ,@dynamic-inits
     (define periodic-thread (thread (start-periodic-loop pipe-out ,@start-periodics))) ; Given by expander
     (define layout (list ,@layout))
     (define (loop)
@@ -135,6 +143,7 @@
   (define state-var (string->symbol (format "~a-value" name)))
   (define state-type (string->symbol (format "~a-state" name)))
   (list 
+    'START
     `(define ,state-var "") ; Code to init state
     (if period
       (list 'PERIODIC `(,(string->symbol name) ,period))
@@ -157,6 +166,7 @@
     (layout-transform (flatten nested-layout) namespace)))
 
 (define (layout-transform flat-layout namespace)
+  ; Basically transform all elements of the layout to string, except widgets
   ; lemonbar format. In the future one can use other kinds of formats
   (define (transform elem)
     (define (widget->code name)
