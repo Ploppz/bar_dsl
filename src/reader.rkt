@@ -19,14 +19,15 @@
       (cons token (reduce gen))))
   (define next-token (make-tokenizer port))
   (define tokens (reduce next-token))
-  (datum->syntax #f (parse-result! (parse bar/p tokens))))
+  (define dat (parse-result! (parse bar/p tokens)))
+  (pretty-print dat)
+  (datum->syntax #f dat))
 
 
 (define (make-tokenizer port)
   (lexer port
     ; Implicit eof test
     [(char=? lexer/c #\() (token/s-expression lexer/port) 'SEXPR]
-    ; [(char=? lexer/c #\\) (token/chars lexer/port 2) 'ESCAPED-CHAR]
     [(char-word? lexer/c) (token/word lexer/port) 'WORD]
     [else                 (token/chars lexer/port 1) 'CHAR]))
 

@@ -1,5 +1,5 @@
 #lang racket
-(provide mpd-listener mpd-state)
+(provide mpd-loop mpd-state)
 
 (require racket/serialize)
 
@@ -21,7 +21,7 @@
 
 ; mpc -f '[[%{F##ff801D3A}%title%][%{F##ff7c5350} by %{F##ff5F176C}%artist%]]|%file%'
 
-(define (mpd-listener port)
+(define (mpd-loop port)
   (define (loop)
     (system "mpc idle player >/dev/null")
     (write (serialize (mpd-get-state)) port)

@@ -13,8 +13,6 @@
 (struct widget (name)) ; For the layout
 (struct sexpr (datum)) ; For the layout
 
-
-
 ;;;;;;;;;;;
 ;;; PARSING
 
@@ -31,16 +29,27 @@
                 [layout <- layout/p]
                 eof/p
                 (pure (bar/code inits starts layout))))
-;; start   : "start" WORD "[" WORD* "=" ">" sexpr "]"
+;; start   : ("start" | "period" INT) WORD "[" WORD* "=" ">" sexpr "]"
+(define int/p (do [digits <- (many/p (satisfy/p (lambda (tok) (char-numeric? (string-ref (token-value tok) 0)))))]
+                  (pure (string->number
+                          (bytes->string/utf-8
+                            (list->bytes
+                              (map (lambda (tok) (char->integer (string-ref (token-value tok) 0)))
+                                   digits)))))))
 (define start/p (do
-                  (token/p "start") spaces/p
+                  [periodic <- (or/p
+                    (do (token/p "start") (pure #f))
+                    (do (token/p "period") spaces/p [period <- int/p] (pure period)))]
+                  spaces/p
                   [start-name <- (token-type/p 'WORD)] spaces/p
                   (token/p "[") spaces/p
                   [params <- (many/p (do [param <- (token-type/p 'WORD)] spaces/p (pure param)))] 
                   (token/p "=") (token/p ">") spaces/p
                   [transform <- sexpr/p] spaces/p
                   (token/p "]") spaces/p
-                  (pure (start/code start-name params transform))))
+                  (pure (start/code start-name params transform periodic))))
+
+
 
 ;; text    : WORD | (any char but \n) | "\'"
 ; Returns a string (possibly part of a bigger)
@@ -80,9 +89,11 @@
 ;;; CODE TRANSLATION
 
 (define (bar/code inits starts nested-layout)
-  (define start-init (map car starts))
-  (define start-thread (map cadr starts))
-  (define start-match (map caddr starts))
+  (define start-inits (map car starts))
+  (define (pred x) (match (cadr x) [(list 'PERIODIC code) code] [_ #f]))
+  (define start-periodics (filter-map pred starts))
+  (define start-threads (map cadr (filter (negate pred) starts)))
+  (define start-patterns (map caddr starts))
   ; Make a namespace and execute the initial statements with it
   (define ns (make-base-namespace))
   (map (lambda (datum) (eval datum ns)) inits)
@@ -93,13 +104,14 @@
     (require racket/serialize)
     (require racket/pretty) ; TODO
     (define-values (pipe-in pipe-out) (make-pipe))
-    ,@start-init
-    ,@start-thread
+    ,@start-inits
+    ,@start-threads
+    (define periodic-thread (thread (start-periodic-loop pipe-out ,@start-periodics))) ; Given by expander
     (define layout (list ,@layout))
     (define (loop)
       (define raw-obj (read pipe-in))
       (define obj (deserialize raw-obj))
-      (match obj ,@start-match)
+      (match obj ,@start-patterns)
       ; Plan:
       ;   - Define the state variables first.
       ;   - Here in the loop, we need to go through the format! When e.g. {mpd} is reached,
@@ -113,15 +125,17 @@
       (loop))
     (loop)))
 
-(define (start/code start-name params transform)
+(define (start/code start-name params transform period)
   (define name (token-value start-name))
-  (define listener-name (string->symbol (format "~a-listener" name)))
+  (define loop-name (string->symbol (format "~a-loop" name)))
   (define thread-name (string->symbol (format "~a-thread" name)))
   (define state-var (string->symbol (format "~a-value" name)))
   (define state-type (string->symbol (format "~a-state" name)))
   (list 
     `(define ,state-var "") ; Code to init state
-    `(define ,thread-name (thread (lambda () (,listener-name pipe-out)))) ; Code to start thread
+    (if period
+      (list 'PERIODIC `(,(string->symbol name) ,period))
+      `(define ,thread-name (thread (lambda () (,loop-name pipe-out))))) ; Code to start thread
     `[(,state-type ,@(map token->ident params)) ; Match clause
       (set! ,state-var ,transform)]))
 
