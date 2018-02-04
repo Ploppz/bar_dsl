@@ -102,7 +102,6 @@
   ; Code
   `(module bar-mod "src/expander.rkt"
     (require racket/serialize)
-    (require racket/pretty) ; TODO
     (define-values (pipe-in pipe-out) (make-pipe))
     ,@start-inits
     ,@start-threads
@@ -112,10 +111,6 @@
       (define raw-obj (read pipe-in))
       (define obj (deserialize raw-obj))
       (match obj ,@start-patterns)
-      ; Plan:
-      ;   - Define the state variables first.
-      ;   - Here in the loop, we need to go through the format! When e.g. {mpd} is reached,
-      ;     just apply the (match-) transform to the saved state variable.
       (for ([element layout])
            (cond
              [(procedure? element) (display (element))]
