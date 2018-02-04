@@ -21,14 +21,17 @@
 (define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
 (define spaces/p (many/p (hidden/p space/p)))
 
-;; program : SEXPR* start* layout+
+;; program : ([']SEXPR)* start* layout+
 (define bar/p (do
                 spaces/p
-                [inits <- (many/p (do [sexpr <- sexpr/p] spaces/p (pure sexpr)))]
+                [inits <- (many/p (or/p static-sexpr/p dynamic-sexpr/p))]
                 [starts <- (many/p start/p)]
                 [layout <- layout/p]
                 eof/p
                 (pure (bar/code inits starts layout))))
+(define static-sexpr/p (do (token/p "'") [datum <- sexpr/p] spaces/p (pure (list 'STATIC datum))))
+(define dynamic-sexpr/p (do [datum <- sexpr/p] spaces/p (pure (list 'DYNAMIC datum))))
+
 ;; start   : ("start" | "period" INT) WORD "[" WORD* "=" ">" sexpr "]"
 (define int/p (do [digits <- (many/p (satisfy/p (lambda (tok) (char-numeric? (string-ref (token-value tok) 0)))))]
                   (pure (string->number
@@ -48,8 +51,6 @@
                   [transform <- sexpr/p] spaces/p
                   (token/p "]") spaces/p
                   (pure (start/code start-name params transform periodic))))
-
-
 
 ;; text    : WORD | (any char but \n) | "\'"
 ; Returns a string (possibly part of a bigger)
@@ -89,14 +90,20 @@
 ;;; CODE TRANSLATION
 
 (define (bar/code inits starts nested-layout)
+  ; Split inits into dynamic part, which is added to the code, and static part, which is evaluated
+  (define user-inits (filter-map (lambda (x) (match x [(list 'DYNAMIC code) code] [_ #f])) inits))
+  (define static-inits (filter-map (lambda (x) (match x [(list 'STATIC code) code] [_ #f])) inits))
+
   (define start-inits (map car starts))
-  (define (pred x) (match (cadr x) [(list 'PERIODIC code) code] [_ #f]))
-  (define start-periodics (filter-map pred starts))
-  (define start-threads (map cadr (filter (negate pred) starts)))
+  
+  (define (fm-periodic x) (match (cadr x) [(list 'PERIODIC code) code] [_ #f]))
+  (define start-periodics (filter-map fm-periodic starts))
+  (define start-threads (map cadr (filter (negate fm-periodic) starts)))
+
   (define start-patterns (map caddr starts))
   ; Make a namespace and execute the initial statements with it
   (define ns (make-base-namespace))
-  (map (lambda (datum) (eval datum ns)) inits)
+  (map (lambda (datum) (eval datum ns)) static-inits)
   ; Structure the layout
   (define layout (layout-structure nested-layout ns))
   ; Code
@@ -105,6 +112,7 @@
     (define-values (pipe-in pipe-out) (make-pipe))
     ,@start-inits
     ,@start-threads
+    ,@user-inits
     (define periodic-thread (thread (start-periodic-loop pipe-out ,@start-periodics))) ; Given by expander
     (define layout (list ,@layout))
     (define (loop)
