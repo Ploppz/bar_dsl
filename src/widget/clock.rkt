@@ -1,7 +1,9 @@
-#lang racket
+#lang racket/base
+
 (provide clock-get-state clock-state)
 
-(require racket/serialize racket/date)
+(require racket/serialize
+         racket/date)
 
 (struct clock-state (h m s) #:prefab)
 

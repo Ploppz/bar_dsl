@@ -1,18 +1,22 @@
-#lang racket
+#lang racket/base
 (provide lexer          ; Macro to create a lexer
          lexer/c        ; Current character syntax parameter of lexer.
          lexer/port     ; The port which parsers should read from.
+         lexer/next-token
          (struct-out token)
          token-type/p
          token/p)
 
-(require (for-syntax syntax/parse)     ; syntax-parse
-          (for-syntax megaparsack)
-          racket/stxparam
-          megaparsack
-          racket/match
-          data/applicative              ; pure
-          data/monad)                   ; do
+(require racket/stxparam
+         racket/bool
+         racket/match
+         racket/port
+         megaparsack
+         data/applicative           ; pure
+         data/monad                 ; do
+         (for-syntax racket/base
+                     syntax/parse  ; syntax-parse
+                     megaparsack))
 
 (struct token (name value) #:transparent)
 ;;;;;;;;;;;
@@ -48,24 +52,28 @@
 (define-syntax-parameter lexer/port
   (lambda (stx)
     (raise-syntax-error (syntax-e stx) "undefined or outside of `lexer`.")))
+(define-syntax-parameter lexer/next-token
+  (lambda (stx)
+    (raise-syntax-error (syntax-e stx) "undefined or outside of `lexer`.")))
 
 (begin-for-syntax
   (define (transform port clause)
     (with-syntax ([(pred parser name) clause])
-                 ; Make a clause of a cond
-                 #`[pred
-                    ; This is ugly:
-                    ; Make a peeking port `port2` which we give to the parser.
-                    ; Then read the string from `port`.
-                    (define-values (start-line start-col start-pos) (port-next-location #,port))
-                    (define port2 (peeking-input-port #,port))
-                    (syntax-parameterize ([lexer/port (make-rename-transformer #'port2)])
-                      (define span parser)
-                      ; ^ TODO: not really necessary that the parsers return span.
-                      ;         We can get from port-next-location.
-                      (define value (read-string span #,port))
-                      (create-token name value "undefined" start-line start-col start-pos span))
-                    ])))
+      ; Make a clause of a cond
+      #`[pred
+         ; This is ugly:
+         ; Make a peeking port `port2` which we give to the parser.
+         ; Then read the string from `port`.
+         (define-values (start-line start-col start-pos) (port-next-location #,port))
+         (define port2 (peeking-input-port #,port))
+         (syntax-parameterize ([lexer/port (make-rename-transformer #'port2)])
+           (define span parser)
+           ; ^ TODO: not really necessary that the parsers return span.
+           ;         We can get from port-next-location.
+           (define value (read-string span #,port))
+           (if name
+             (create-token name value "undefined" start-line start-col start-pos span)
+             (next-token)))])))
 (define (create-token name value srcname line column position span)
   (syntax-box (token name value) (srcloc srcname line column position span)))
 
@@ -82,7 +90,8 @@
           (port-count-lines! port)
           (define (next-token)
             (define c (peek-char port))
-            (syntax-parameterize ([lexer/c (make-rename-transformer #'c)])
+            (syntax-parameterize ([lexer/c (make-rename-transformer #'c)]
+                                  [lexer/next-token (make-rename-transformer #'next-token)])
               (cond
                 [(eof-object? c) #f]
                 #,@clauses)))

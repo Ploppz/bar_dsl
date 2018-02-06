@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 ; This file creates a tokenizer using `lexer`, and provides `read-syntax`.
 (provide read-syntax
          make-tokenizer)
@@ -9,28 +9,28 @@
          "lex.rkt"
          "parser.rkt")
 
-(require racket/pretty)
-
 (define (read-syntax path port)
   (define (reduce gen)
     (define token (gen))
-    (if (false? token)
+    (if (not token)
       (list)
       (cons token (reduce gen))))
   (define next-token (make-tokenizer port))
   (define tokens (reduce next-token))
   (define dat (parse-result! (parse bar/p tokens)))
-  (pretty-print dat)
   (datum->syntax #f dat))
 
 
 (define (make-tokenizer port)
   (lexer port
     ; Implicit eof test
+    [(char=? lexer/c #\;) (token/comment lexer/port) #f] ; no token
     [(char=? lexer/c #\() (token/s-expression lexer/port) 'SEXPR]
     [(char-word? lexer/c) (token/word lexer/port) 'WORD]
     [else                 (token/chars lexer/port 1) 'CHAR]))
 
+(define (token/comment port)
+  (string-length (read-line port)))
 (define (token/chars port n)
   (read-string n port)
   n)
@@ -51,7 +51,7 @@
   (or (char-alphabetic? c)
       (char-numeric? c)
       (char=? c #\-)
-      (char=? c #\-)))
+      (char=? c #\_)))
 
 (define (token/word port)
   (define c (peek-char port))

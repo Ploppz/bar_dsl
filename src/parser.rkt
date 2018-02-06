@@ -1,6 +1,11 @@
-#lang racket
+#lang racket/base
 (provide bar/p)
 (require "lex.rkt"
+         racket/match
+         racket/bool
+         racket/list
+         racket/function
+         racket/string
          megaparsack
          data/monad ; for do
          data/applicative) ; for pure
@@ -21,11 +26,16 @@
 (define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
 (define spaces/p (many/p (hidden/p space/p)))
 
-(define static-sexpr/p (do (token/p "'") [datum <- sexpr/p] spaces/p (pure (list 'STATIC-SEXPR datum))))
-(define dynamic-sexpr/p (do [datum <- sexpr/p] spaces/p (pure (list 'DYNAMIC-SEXPR datum))))
+(define static-sexpr/p
+  (do (token/p "'") [datum <- sexpr/p] spaces/p (pure (list 'STATIC-SEXPR datum))))
+(define dynamic-sexpr/p
+  (do [datum <- sexpr/p] spaces/p (pure (list 'DYNAMIC-SEXPR datum))))
 
 ;; start   : ("start" | "period" INT) WORD "[" WORD* "=" ">" sexpr "]"
-(define int/p (do [digits <- (many/p (satisfy/p (lambda (tok) (char-numeric? (string-ref (token-value tok) 0)))))]
+(define int/p (do [digits <-
+                    (many/p
+                      (satisfy/p
+                        (lambda (tok) (char-numeric? (string-ref (token-value tok) 0)))))]
                   (pure (string->number
                           (bytes->string/utf-8
                             (list->bytes
@@ -46,10 +56,13 @@
 
 ;; text    : WORD | (any char but \n) | "\'"
 ; Returns a string (possibly part of a bigger)
-(define text/p (do [text-token <- (or/p (token-type/p 'WORD)
-                                        (do (token/p "\\") (token/p "'") (pure (token 'CHAR "'")))
-                                        (satisfy/p text-char?))]
-                   (pure (token-value text-token))))
+(define text/p
+  (do [text-token <-
+        (or/p (token-type/p 'WORD)
+              (do (token/p "\\") (token/p "'") (pure (token 'CHAR "'"))) ; \' -> '
+              (token-type/p 'SEXPR) ; will give string
+              (satisfy/p text-char?))]
+    (pure (token-value text-token))))
 ;; widget  : "[" WORD "]"
 (define widget/p (do (token/p "[")
                      [name <- (token-type/p 'WORD)]
@@ -115,18 +128,26 @@
   ; Structure the layout
   (define layout (layout-structure layouts ns))
   ; Code
-  `(module bar-mod "src/expander.rkt"
+  `(module bar-module "src/expander.rkt"
     (require racket/serialize)
     (define-values (pipe-in pipe-out) (make-pipe))
     ,@start-inits
     ,@start-threads
     ,@dynamic-inits
-    (define periodic-thread (thread (start-periodic-loop pipe-out ,@start-periodics))) ; Given by expander
+    (define periodic-thread
+      (thread (start-periodic-loop pipe-out ,@start-periodics))) ; Given by expander
     (define layout (list ,@layout))
     (define (loop)
-      (define raw-obj (read pipe-in))
-      (define obj (deserialize raw-obj))
-      (match obj ,@start-patterns)
+      ; read-loop is there so that we can read several objects from the pipe,
+      ;    but only write to stdout once
+      (define (read-loop)
+        (define raw-obj (read pipe-in))
+        (define obj (deserialize raw-obj))
+        (match obj ,@start-patterns)
+        (if (byte-ready? pipe-in)
+          (read-loop) #f))
+      (read-loop)
+      ; Write to stdout
       (for ([element layout])
            (cond
              [(procedure? element) (display (element))]
