@@ -1,21 +1,21 @@
 #lang reader "src/reader.rkt"
 ; TODO: The fg & bg should be given, but dependent on the target bar, e.g. lemonbar, polybar, ...
 ; Colors!
-'(define (fg col) (format "%{F~a}" col))
-'(define (bg col) (format "%{B~a}" col))
-'(define transparent "#00000000")
-'(define bg0 "#111111")
-'(define bg1 "#1F4B17")
-'(define bg2 "#111111")
-'(define bg3 "#497933")
+(define (fg col) (format "%{F~a}" col))
+(define (bg col) (format "%{B~a}" col))
+(define transparent "#00000000")
+(define bg0 "#111111")
+(define bg1 "#1F4B17")
+(define bg2 "#111111")
+(define bg3 "#497933")
 
 ; Stuff for left (L) and right (R) separators
-'(define cur-bg "#000")
-'(define (R new-bg)
+(define cur-bg "#000")
+(define (R new-bg)
    (let [(old-bg cur-bg)]
      (set! cur-bg new-bg)
      (format "%{F~a} %{B~a}⮀⮁%{F#FFF} " old-bg new-bg)))
-'(define (L new-bg)
+(define (L new-bg)
    (let [(old-bg cur-bg)]
      (set! cur-bg new-bg)
      (format "%{F~a} %{B~a} ⮃⮂%{F#FFF}%{B#111}" new-bg old-bg)))

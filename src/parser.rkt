@@ -26,8 +26,6 @@
 (define space/p (or/p (token/p "\n") (token/p " ") (token/p "\t")))
 (define spaces/p (many/p (hidden/p space/p)))
 
-(define static-sexpr/p
-  (do (token/p "'") [datum <- sexpr/p] spaces/p (pure (list 'STATIC-SEXPR datum))))
 (define dynamic-sexpr/p
   (do [datum <- sexpr/p] spaces/p (pure (list 'DYNAMIC-SEXPR datum))))
 
@@ -92,7 +90,6 @@
 (define bar/p (do
                 spaces/p
                 [elements <- (many/p (or/p
-                                       static-sexpr/p
                                        dynamic-sexpr/p
                                        start/p
                                        layout/p))]
@@ -122,11 +119,8 @@
   (define start-periodics (filter-map fm-periodic start-threads/periodics))
   (define start-threads (filter (negate fm-periodic) start-threads/periodics))
 
-  ; Make a namespace and execute the initial statements with it
-  (define ns (make-base-namespace))
-  (map (lambda (datum) (eval datum ns)) static-inits)
   ; Structure the layout
-  (define layout (layout-structure layouts ns))
+  (define layout (layout-structure layouts))
   ; Code
   `(module bar-module "src/expander.rkt"
     (require racket/serialize)
@@ -182,11 +176,11 @@
               (string->symbol val)]))
 
 
-(define (layout-structure nested-layout namespace)
+(define (layout-structure nested-layout)
   (concat-subsequent-strings
-    (layout-transform (flatten nested-layout) namespace)))
+    (layout-transform (flatten nested-layout))))
 
-(define (layout-transform flat-layout namespace)
+(define (layout-transform flat-layout)
   ; Basically transform all elements of the layout to string, except widgets
   ; lemonbar format. In the future one can use other kinds of formats
   (define (transform elem)
@@ -198,9 +192,7 @@
            ['right "%{r}"]
            ['center "%{c}"]
            [(widget name) (widget->code name)]
-           [(sexpr datum) (define val (eval datum namespace))
-                          (if (string? val) val
-                            (error "Function call in layout must return string!"))] ;TODO Proper error...
+           [(sexpr datum) `(lambda () ,datum)]
            [else elem]))
   (map transform flat-layout))
 (define (concat-subsequent-strings l) ; Concatenate all subsequent strings in a list
