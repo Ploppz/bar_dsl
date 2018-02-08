@@ -4,21 +4,18 @@
 (define (fg col) (format "%{F~a}" col))
 (define (bg col) (format "%{B~a}" col))
 (define transparent "#00000000")
-(define bg0 "#111111")
-(define bg1 "#1F4B17")
-(define bg2 "#111111")
-(define bg3 "#497933")
+(define bg0 "#3F6C2F")
+(define bg1 "#6C612F")
+(define bg2 "#6C2F3D")
+(define bg3 "#432F6C")
 
 ; Stuff for left (L) and right (R) separators
-(define cur-bg "#000")
-(define (R new-bg)
-   (let [(old-bg cur-bg)]
-     (set! cur-bg new-bg)
-     (format "%{F~a} %{B~a}⮀⮁%{F#FFF} " old-bg new-bg)))
-(define (L new-bg)
-   (let [(old-bg cur-bg)]
-     (set! cur-bg new-bg)
-     (format "%{F~a} %{B~a} ⮃⮂%{F#FFF}%{B#111}" new-bg old-bg)))
+(define cur-bg "xxx")
+(define (open bg)
+  (set! cur-bg bg)
+  (format "  %{F~a}⮂%{B~a}%{F#FFF}" bg bg))
+(define (close)
+  (format "%{B#00000000}%{F~a}⮀  " cur-bg))
 
 
 ;; Music information from mpd
@@ -35,19 +32,23 @@ start mpd [state title artist album =>
   (define (make-big-name name) (list-ref greek-big (string->number name)))
   (define (make-small-name name) (list-ref greek-small (string->number name)))
   (match desktop
-   [(bspwm-desktop name _ #t _) (format "%{B#9a1} %{F#000}~a %{B#111} ~a" (make-big-name name) sep)]
-   [(bspwm-desktop name #t #f _) (format "%{B#111} %{F#9a1}~a ~a" (make-big-name name) sep)]
-   [(bspwm-desktop name #f #f _) (format "%{B#111} %{F#554}~a ~a" (make-small-name name) sep)]))
+   [(bspwm-desktop name _ #t _) (format  "%{B#fea}%{F#000} ~a %{B#000}~a" (make-big-name name) sep)]
+   [(bspwm-desktop name #t #f _) (format "%{B#000}%{F#FFF} ~a ~a" (make-big-name name) sep)]
+   [(bspwm-desktop name #f #f _) (format "%{B#000} %{F#554}~a ~a" (make-small-name name) sep)]))
 
 start bspwm [desktops monocle wmode =>
-              (format "%{F#FAC}~a ~a ~a ~a %{F#FAC}~a"
+              (format "~a ~a ~a ~a ~a ~a ~a ~a ~a"
+                (open bg0)
                 (symbol->string wmode)
-                (L bg0)
+                (close)
+                (open "#000")
                 (string-join (for/list [(desktop desktops)
                                         (i '(#f #f #t #f #f #t #f #f #f))]
                                        (format-desktop desktop i)) "")
-                (R transparent)
-                (if monocle "monocle" "tile"))]
+                (close)
+                (open bg1)
+                (if monocle "monocle" "tile")
+                (close))]
 
 ;; RAM
 (define (to-gb kb precision)
@@ -58,6 +59,6 @@ period 1 ram [used total => (format " ~a/~a GB RAM" (to-gb used 3) (to-gb total 
 (define (pad2 num) (~r num #:min-width 2 #:pad-string "0"))
 period 1 clock [h m s => (format "~a:~a:~a" (pad2 h) (pad2 m) (pad2 s))]
 
-@left '(fg "#FFF") '(bg bg0) '[ram] '(R bg1) ⭦ 1.2% '(R bg2) ⮞ 34 '(R bg3) '[mpd] '(R transparent)
-@center '[bspwm]
-@right '[clock]
+@left %{U#FFF} '(fg "#FFF") '(open bg0) '[ram] '(close) '(open bg1) ⭦ 1.2% '(close) '(open bg2) ⮞ 34 '(close) '(open bg3) '[mpd] '(close) '(bg transparent)
+@center '[bspwm] '(bg transparent)
+@right '(open bg3) '[clock] '(close) '(bg transparent)

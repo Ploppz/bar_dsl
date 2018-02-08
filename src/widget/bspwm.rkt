@@ -18,7 +18,7 @@
       [#\T 'tiled]
       [#\P 'pseudo]
       [#\F 'floating]
-      [#\= 'fullscreen]))
+      [#\= 'full]))
 (define (parse-bspwm-desktop str)
   (define flag (string-ref str 0))
   (define occupied (or (char=? flag #\o) (char=? flag #\O)))
@@ -38,7 +38,7 @@
                [#\L (loop (rest elements) desktops (char=? (string-ref elem 1) #\M) wmode)]
                [#\T (loop (rest elements) desktops monocle (parse-wmode (string-ref elem 1)))]
                [_ (loop (rest elements) desktops monocle wmode)])]))
-  (define-values (desktops monocle wmode) (loop strs (list) #f #f))
+  (define-values (desktops monocle wmode) (loop strs (list) #f 'none))
   (bspwm-state desktops monocle wmode))
 
 (define (bspwm-loop port)
