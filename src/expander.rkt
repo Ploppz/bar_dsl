@@ -8,7 +8,7 @@
               "widget/clock.rkt"
               "widget/bspwm.rkt"
               "widget/ram.rkt")
-; Necessities
+; Racket utilities
 (provide-from racket/base
               racket/format
               racket/match
@@ -42,3 +42,4 @@
              (periodic-loop (+ 1 counter)))
            (periodic-loop 0)))]
     [(_) #'(void)]))
+
