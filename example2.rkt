@@ -60,4 +60,4 @@ period 1 clock [h m s => (format "~a:~a:~a" (pad2 h) (pad2 m) (pad2 s))]
 
 @left '(fg "#FFF") '(bg bg0) '[ram] '(R bg1) ⭦ 1.2% '(R bg2) ⮞ 34 '(R bg3) '[mpd] '(R transparent)
 @center '[bspwm]
-@right '[clock]
+@right %{B#497933} '[clock]
